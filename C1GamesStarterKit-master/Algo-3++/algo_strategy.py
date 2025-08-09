@@ -32,7 +32,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         """
         gamelib.debug_write('Configuring your custom algo strategy...')
         self.config = config
-        global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP
+        global WALL, SUPPORT, TURRET, SCOUT, DEMOLISHER, INTERCEPTOR, MP, SP, send_scouts
         WALL = config["unitInformation"][0]["shorthand"]
         SUPPORT = config["unitInformation"][1]["shorthand"]
         TURRET = config["unitInformation"][2]["shorthand"]
@@ -41,8 +41,12 @@ class AlgoStrategy(gamelib.AlgoCore):
         INTERCEPTOR = config["unitInformation"][5]["shorthand"]
         MP = 1
         SP = 0
+
         # This is a good place to do initial setup
         self.scored_on_locations = []
+        self.send_scouts = False
+        self.scout_spawn_location = []
+        self.clear_locations = []
 
     def on_turn(self, turn_state):
         """
@@ -54,7 +58,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         """
         game_state = gamelib.GameState(self.config, turn_state)
         gamelib.debug_write('Performing turn {} of your custom algo strategy'.format(game_state.turn_number))
-        game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
+        #game_state.suppress_warnings(True)  #Comment or remove this locations to enable warnings.
 
         self.strategy(game_state)
 
@@ -67,42 +71,71 @@ class AlgoStrategy(gamelib.AlgoCore):
     """
 
     def strategy(self, game_state):
-        if game_state.turn_number == 1:
-            self.starter(game_state)
-        else:
-            self.build_turrets(game_state)
+        self.build_turrets(game_state, self.clear_locations)
+        if self.send_scouts:
             self.build_supports(game_state)
+            self.spam_scouts(game_state, self.scout_spawn_location)
+            self.send_scouts = False
+            self.clear_locations = []
+        elif game_state.get_resources()[MP] > 14:
+            self.send_scouts = True
+            self.scout_spawn_location = [0, 13] if game_state.turn_number % 2 == 0 else [0, 0]
+            self.clear_path(game_state)
+            
+            
+    def clear_path(self, game_state):
+        self.clear_locations = []
+        if self.scout_spawn_location == [0, 13]:
+            for y in range(14):
+                self.clear_locations.append([13 - y, y])
+                self.clear_locations.append([14 - y, y])
+        else:
+            for y in range(14):
+                self.clear_locations.append([y + 14, y])
+                self.clear_locations.append([y + 13, y])
 
-        self.spam_scouts(game_state)
-    
-    def starter(self, game_state):
-        # Place turrets that attack enemy units
-        turret_locations = [[i, 13] for i in range(2, 28)]
-        # attempt_spawn will try to spawn units if we have resources, and will check if a blocking unit is already there
-        game_state.attempt_spawn(TURRET, turret_locations)
-        game_state.attempt_spawn(SUPPORT, [1, 12])
-        game_state.attempt_upgrade([1, 12])
+        game_state.attempt_remove(self.clear_locations)
 
 
-    def build_turrets(self, game_state):
+    def build_turrets(self, game_state, exclude = []):
         """
-        Make sure our line of turrets still holds 
+        Make sure our locations of turrets still holds 
         """
-        for x in range(2, 28):
-            game_state.attempt_spawn(TURRET, [x, 13])
+        groups = [[[int(i), 13] for i in range(28)], 
+                     [[int(i), 12] for i in range(1, 5)],
+                     [[int(i), 12] for i in range(23, 27)],
+                     [[int(i), 11] for i in range(2, 12)],
+                     [[int(i), 11] for i in range(16, 26)],
+                     [[11, 10], [16, 10], [11, 9], [16, 9]],
+                     [[int(i), 8] for i in range(12, 16)]]
+        
+        if not exclude:
+            for locations in groups:
+                game_state.attempt_spawn(TURRET, locations)
+        else:
+            for locations in groups:
+                for location in locations:
+                    if location not in exclude:
+                        game_state.attempt_spawn(TURRET, location)
+
+        self.update_turrets(game_state, groups)
+
+    def update_turrets(self, game_state, groups):
+        # start upgrading our turrets
+        for locations in groups:
+            game_state.attempt_upgrade(locations)
+
     
     def build_supports(self, game_state):
         """
         Keep making supports and upgrading them
         """
-        x = 1; y = 12
-        while(game_state.get_resource(SP) >= 4):
-            game_state.attempt_spawn(SUPPORT, [x, y])
-            game_state.attempt_upgrade([x, y])
-            x += 1; y += 1
-            if x == 4:
-                y -= 1
-                x = 1 + 12 - y
+        for i in range(13, 4, -1):
+            if game_state.get_resources()[SP] < 4:
+                break
+            game_state.attempt_spawn(SUPPORT, [i, 12])
+            game_state.attempt_upgrade([i, 12])
+        
 
     def build_reactive_defense(self, game_state):
         """
@@ -116,9 +149,22 @@ class AlgoStrategy(gamelib.AlgoCore):
             build_location = [location[0], location[1]+1]
             game_state.attempt_spawn(TURRET, build_location)
 
-    def spam_scouts(self, game_state):
-        while game_state.get_resource(MP) >= game_state.type_cost(SCOUT)[MP]:
-            game_state.attempt_spawn(SCOUT, [0, 13])
+    def spam_scouts(self, game_state, spawn_location):
+        if spawn_location == [0, 13]:
+            for i in range(11):
+                game_state.attempt_spawn(SCOUT, [13, 0])
+            for y in range(1, 11):
+                if game_state.get_resources()[MP] < 1:
+                    break
+                for i in range(5):
+                    game_state.attempt_spawn(SCOUT, [13 - y, y])
+        else:
+            for i in range(11):
+                game_state.attempt_spawn(SCOUT, [14, 0])
+            for y in range(1, 11):
+                for i in range(10):
+                    game_state.attempt_spawn(SCOUT, [14 + y, y])
+
 
     def least_damage_spawn_location(self, game_state, location_options):
         """

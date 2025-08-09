@@ -490,7 +490,7 @@ class GameState:
         """
         if self.contains_stationary_unit(start_location):
             self.warn("Attempted to perform pathing from blocked starting location {}".format(start_location))
-            return
+            #return
 
         if target_edge is None:
             target_edge = self.get_target_edge(start_location)
