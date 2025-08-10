@@ -71,23 +71,24 @@ class AlgoStrategy(gamelib.AlgoCore):
     """
 
     def strategy(self, game_state):
-        self.build_turrets(game_state, self.clear_locations)
+        self.build_defense(game_state, self.clear_locations)
         if self.send_scouts:
             self.build_supports(game_state)
             self.spam_scouts(game_state, self.scout_spawn_location)
             self.send_scouts = False
             self.clear_locations = []
-        elif game_state.get_resources()[MP] > 14:
+        elif game_state.get_resources()[MP] > 13:
             self.send_scouts = True
-            self.scout_spawn_location = [0, 13] if game_state.turn_number % 2 == 0 else [0, 0]
+            self.scout_spawn_location = [1, 13]
             self.clear_path(game_state)
             
             
     def clear_path(self, game_state):
         self.clear_locations = []
-        if self.scout_spawn_location == [0, 13]:
+        if self.scout_spawn_location == [1, 13]:
             for y in range(14):
-                self.clear_locations.append([13 - y, y])
+                if [13 - y, y] != [0, 13]:
+                    self.clear_locations.append([13 - y, y])
                 self.clear_locations.append([14 - y, y])
         else:
             for y in range(14):
@@ -97,34 +98,30 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state.attempt_remove(self.clear_locations)
 
 
-    def build_turrets(self, game_state, exclude = []):
+    def build_defense(self, game_state, exclude = []):
         """
-        Make sure our locations of turrets still holds 
+        Make sure our turrets and walls still holds
         """
-        groups = [[[int(i), 13] for i in range(28)], 
-                     [[int(i), 12] for i in range(1, 5)],
-                     [[int(i), 12] for i in range(23, 27)],
-                     [[int(i), 11] for i in range(2, 12)],
-                     [[int(i), 11] for i in range(16, 26)],
-                     [[11, 10], [16, 10], [11, 9], [16, 9]],
-                     [[int(i), 8] for i in range(12, 16)]]
+        wall_locations = [[0, 13], [27, 13]]
+
+        for location in wall_locations:
+            if location not in exclude:
+                game_state.attempt_spawn(WALL, location)
+                game_state.attempt_upgrade(location)
+            if game_state.game_map[location] and game_state.game_map[location][0].health <= 60:
+                game_state.attempt_spawn(WALL, location)
+                game_state.attempt_upgrade(location)
+
+        groups = [[[int(i), 13] for i in range(1, 27)], 
+                     [[int(i), 12] for i in range(1, 3)],
+                     [[int(i), 12] for i in range(25, 27)]]
         
-        if not exclude:
-            for locations in groups:
-                game_state.attempt_spawn(TURRET, locations)
-        else:
-            for locations in groups:
-                for location in locations:
-                    if location not in exclude:
-                        game_state.attempt_spawn(TURRET, location)
-
-        self.update_turrets(game_state, groups)
-
-    def update_turrets(self, game_state, groups):
-        # start upgrading our turrets
         for locations in groups:
-            game_state.attempt_upgrade(locations)
-
+            for location in locations:
+                if location not in exclude:
+                    game_state.attempt_spawn(TURRET, location)
+                if game_state.game_map[location] and game_state.game_map[location][0].health <= 37.5:
+                    game_state.attempt_remove(location)
     
     def build_supports(self, game_state):
         """
@@ -150,21 +147,10 @@ class AlgoStrategy(gamelib.AlgoCore):
             game_state.attempt_spawn(TURRET, build_location)
 
     def spam_scouts(self, game_state, spawn_location):
-        if spawn_location == [0, 13]:
-            for i in range(11):
-                game_state.attempt_spawn(SCOUT, [13, 0])
-            for y in range(1, 11):
-                if game_state.get_resources()[MP] < 1:
-                    break
-                for i in range(5):
-                    game_state.attempt_spawn(SCOUT, [13 - y, y])
-        else:
-            for i in range(11):
-                game_state.attempt_spawn(SCOUT, [14, 0])
-            for y in range(1, 11):
-                for i in range(10):
-                    game_state.attempt_spawn(SCOUT, [14 + y, y])
-
+        for i in range(5):
+            game_state.attempt_spawn(SCOUT, [12, 1])
+        while(game_state.get_resources()[MP] >= 1):
+            game_state.attempt_spawn(SCOUT, [14, 0])
 
     def least_damage_spawn_location(self, game_state, location_options):
         """
@@ -208,7 +194,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         Processing the action frames is complicated so we only suggest it if you have time and experience.
         Full doc on format of a game frame at in json-docs.html in the root of the Starterkit.
         """
-        # Let's record at what position we get scored on
+        """# Let's record at what position we get scored on
         state = json.loads(turn_string)
         events = state["events"]
         breaches = events["breach"]
@@ -220,7 +206,7 @@ class AlgoStrategy(gamelib.AlgoCore):
             if not unit_owner_self:
                 gamelib.debug_write("Got scored on at: {}".format(location))
                 self.scored_on_locations.append(location)
-                gamelib.debug_write("All locations: {}".format(self.scored_on_locations))
+                gamelib.debug_write("All locations: {}".format(self.scored_on_locations))"""
 
 
 if __name__ == "__main__":
